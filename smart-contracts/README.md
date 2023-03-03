@@ -2,6 +2,7 @@
 
 - [fungible token](assembly/contracts/FT): implementation of the ERC20 token.
 - [non-fungible token](assembly/contracts/NFT)
+- [semi-fungible token](assembly/contracts/SFT)
 
 ## Documentation
 
