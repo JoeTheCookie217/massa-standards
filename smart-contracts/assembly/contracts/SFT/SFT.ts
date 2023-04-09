@@ -184,9 +184,11 @@ export function mint(_args: StaticArray<u8>): void {
   const mintAddress = new Address(
     args.nextString().expect('mintAddress argument is missing or invalid'),
   );
+  const amount = args.nextU64().expect('amount argument is missing or invalid');
+
   _increment();
   const tokenToMint = _currentSupply();
-  _setBalance(mintAddress, tokenToMint, _balance(mintAddress, tokenToMint) + 1);
+  _setBalance(mintAddress, tokenToMint, _balance(mintAddress, tokenToMint) + amount);
   // generateEvent(`tokenId ${tokenToMint} minted to ${mintAddress} `);
 }
 

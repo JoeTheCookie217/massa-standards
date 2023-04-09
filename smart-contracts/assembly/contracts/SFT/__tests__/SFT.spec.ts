@@ -22,6 +22,7 @@ import {
   getApproved,
   approve,
   transferFrom,
+  balanceOf,
 } from '../SFT';
 import { SFTWrapper } from '../SFTWrapper';
 
@@ -110,14 +111,17 @@ describe('SFT contract TEST', () => {
 
   test('mint call, ownerOf and currentSupply call', () => {
     expect(bytesToU64(currentSupply())).toBe(0);
+    const amountToMint = u64(2);
     for (let i = 0; i < 5; i++) {
-      mint(new Args().add(callerAddress).serialize());
+      mint(new Args().add(callerAddress).add(amountToMint).serialize());
     }
     expect(Storage.get(counterKey)).toStrictEqual(u64ToBytes(SFTtotalSupply));
     expect(bytesToU64(currentSupply())).toBe(SFTtotalSupply);
-    // expect(ownerOf(new Args().add<u64>(2).serialize())).toStrictEqual(
-    //   stringToBytes(callerAddress),
-    // );
+
+    const someTokenID = u64(3);
+    expect(
+      balanceOf(new Args().add(callerAddress).add(someTokenID).serialize()),
+    ).toStrictEqual(u64ToBytes(2));
   });
 
   throws('we have reach max supply', () => {
@@ -128,17 +132,30 @@ describe('SFT contract TEST', () => {
   });
 
   test('transfer call', () => {
-    const tokenToSend = 2;
     const receiver = '2x';
+    const tokenToSend = u64(2);
+    const amountToSend = u64(1);
     const argTransfer = new Args()
       .add(receiver)
-      .add(u64(tokenToSend))
-      .add(u64(1))
+      .add(tokenToSend)
+      .add(amountToSend)
       .serialize();
+
     transfer(argTransfer);
-    // expect(ownerOf(u64ToBytes(tokenToSend))).toStrictEqual(
-    //   stringToBytes(receiver),
-    // );
+    expect(
+      balanceOf(new Args().add(callerAddress).add(tokenToSend).serialize()),
+    ).toStrictEqual(u64ToBytes(1));
+    expect(
+      balanceOf(new Args().add(receiver).add(tokenToSend).serialize()),
+    ).toStrictEqual(u64ToBytes(1));
+
+    transfer(argTransfer);
+    expect(
+      balanceOf(new Args().add(callerAddress).add(tokenToSend).serialize()),
+    ).toStrictEqual(u64ToBytes(0));
+    expect(
+      balanceOf(new Args().add(receiver).add(tokenToSend).serialize()),
+    ).toStrictEqual(u64ToBytes(2));
   });
 
   test('approval', () => {

@@ -4,6 +4,8 @@ import {
   generateEvent,
   callerHasWriteAccess,
   Address,
+  getBytecodeOf,
+  call,
 } from '@massalabs/massa-as-sdk';
 import {
   Args,
@@ -11,6 +13,7 @@ import {
   stringToBytes,
   u64ToBytes,
 } from '@massalabs/as-types';
+import { _balance, _setBalance } from '../FT/token-commons';
 
 export const nameKey = 'name';
 export const symbolKey = 'symbol';
@@ -19,8 +22,11 @@ export const baseURIKey = 'baseURI';
 export const ownerKey = 'Owner';
 export const counterKey = stringToBytes('Counter');
 export const ownerTokenKey = 'ownerOf_';
+export const balanceKey = 'balanceOf_';
 export const approvedTokenKey = 'approved_';
 export const initCounter = 0;
+
+export const onERC721ReceivedSelector: StaticArray<u8> = u64ToBytes(0x150b7a02);
 
 /**
  * Initialize all the properties of the NFT (contract Owner, counter to 0...)
@@ -183,6 +189,20 @@ export function ownerOf(_args: StaticArray<u8>): StaticArray<u8> {
   return stringToBytes(Storage.get(key));
 }
 
+/**
+ * Return the user balance
+ * @param _args - owner serialized with `Args` as Address
+ * @returns serialized u64 as string
+ */
+// export function balanceOf(_args: StaticArray<u8>): StaticArray<u8> {
+//   const args = new Args(_args);
+//   const owner = new Address(
+//     args.nextString().expect('tokenId argument is missing or invalid'),
+//   );
+
+//   return u64ToBytes(_balance(owner));
+// }
+
 // ==================================================== //
 // ====                    MINT                    ==== //
 // ==================================================== //
@@ -228,7 +248,7 @@ function _onlyOwner(): bool {
  * @param tokenId - the tokenID
  * @returns true if the caller is token's owner
  */
-function _onlyTokenOwner(tokenId: u64): bool {
+function _onlyTokenOwner(from: Address, tokenId: u64): bool {
   // as we need to compare two byteArrays, we need to compare the pointers
   // we transform our byte array to their pointers and we compare them
   const left = ownerOf(u64ToBytes(tokenId));
@@ -270,23 +290,16 @@ function _currentSupply(): u64 {
  */
 export function transfer(binaryArgs: StaticArray<u8>): void {
   const args = new Args(binaryArgs);
-  const toAddress = args
-    .nextString()
-    .expect('toAddress argument is missing or invalid');
+  const toAddress = new Address(
+    args.nextString().expect('toAddress argument is missing or invalid'),
+  );
   const tokenId = args
     .nextU64()
     .expect('tokenId argument is missing or invalid');
 
-  assertIsMinted(tokenId);
   assertOnlyOwner(tokenId);
 
-  _removeApprovals(tokenId);
-
-  Storage.set(ownerTokenKey + tokenId.toString(), toAddress);
-
-  generateEvent(
-    `token ${tokenId.toString()} sent from ${Context.caller().toString()} to ${toAddress}`,
-  );
+  _transfer(Context.caller(), toAddress, tokenId);
 }
 
 /**
@@ -300,22 +313,87 @@ export function transfer(binaryArgs: StaticArray<u8>): void {
  */
 export function transferFrom(binaryArgs: StaticArray<u8>): void {
   const args = new Args(binaryArgs);
-  const from = args
-    .nextString()
-    .expect('fromAddress argument is missing or invalid');
-  const to = args
-    .nextString()
-    .expect('toAddress argument is missing or invalid');
+  const from = new Address(
+    args.nextString().expect('fromAddress argument is missing or invalid'),
+  );
+  const to = new Address(
+    args.nextString().expect('toAddress argument is missing or invalid'),
+  );
   const tokenId = args
     .nextU64()
     .expect('tokenId argument is missing or invalid');
 
-  assertIsMinted(tokenId);
   assertOnlyApproved(from, tokenId);
 
+  _transfer(from, to, tokenId);
+}
+
+/**
+ * Transfer a chosen token from the from Address to the to Address.
+ * First check that the token is minted and that the caller is allowed to transfer the token.
+ * @param binaryArgs - arguments serialized with `Args` containing the following data in this order :
+ * - the sender's account (address)
+ * - the recipient's account (address)
+ * - the tokenID (u64).
+ * @throws if the token is not minted or if the caller is not allowed to transfer the token
+ */
+export function safeTransferFrom(binaryArgs: StaticArray<u8>): void {
+  transferFrom(binaryArgs);
+  _checkOnERC721Received(binaryArgs);
+}
+
+/**
+ * @dev Transfers `tokenId` from `from` to `to`.
+ *  As opposed to {transferFrom}, this imposes no restrictions on msg.sender.
+ *
+ * Requirements:
+ *
+ * - `to` cannot be the zero address.
+ * - `tokenId` token must be owned by `from`.
+ *
+ * Emits a {Transfer} event.
+ */
+function _transfer(from: Address, to: Address, tokenId: u64): void {
+  assertIsMinted(tokenId);
+  assert(
+    _onlyTokenOwner(from, tokenId),
+    'ERC721: transfer from incorrect owner',
+  );
+
+  // Clear approvals from the previous owner
   _removeApprovals(tokenId);
 
-  Storage.set(ownerTokenKey + tokenId.toString(), to);
+  // Update balances and tokenOwner
+  _setBalance(from, _balance(from) - 1);
+  _setBalance(to, _balance(to) + 1);
+  Storage.set(ownerTokenKey + tokenId.toString(), to.toString());
+
+  // Emit transfer event
+  generateEvent(
+    `token ${tokenId.toString()} sent from ${from.toString()} to ${to}`,
+  );
+}
+
+function _checkOnERC721Received(bytes: StaticArray<u8>): void {
+  const args = new Args(bytes);
+  const fromAddress = new Address(
+    args.nextString().expect('fromAddress argument is missing or invalid'),
+  );
+  const to = new Address(
+    args.nextString().expect('toAddress argument is missing or invalid'),
+  );
+
+  if (getBytecodeOf(to).length != 0) {
+    const res = call(to, 'onERC721Received', new Args(bytes), 0);
+    assert(
+      memory.compare(
+        changetype<usize>(res),
+        changetype<usize>(onERC721ReceivedSelector),
+        res.length,
+      ) == 0,
+      'ERC721: transfer to non ERC721Receiver implementer',
+    );
+  }
 }
 
 /**
@@ -435,12 +513,12 @@ function assertIsMinted(tokenId: u64): void {
 
 function assertOnlyOwner(tokenId: u64): void {
   assert(
-    _onlyTokenOwner(tokenId),
+    _onlyTokenOwner(Context.caller(), tokenId),
     `You are not the owner of ${tokenId.toString()}`,
   );
 }
 
-function assertOnlyApproved(from: string, tokenId: u64): void {
+function assertOnlyApproved(from: Address, tokenId: u64): void {
   assert(
     isApproved(new Args().add(from).add(tokenId).serialize()),
     'You are not allowed to transfer this token',

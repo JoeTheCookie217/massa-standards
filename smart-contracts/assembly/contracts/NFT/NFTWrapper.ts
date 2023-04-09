@@ -133,6 +133,26 @@ export class NFTWrapper {
   }
 
   /**
+   * Safely transfer a chosen token from the fromAddress to the toAddress.
+   * If the recipient is a contract, it must implement the onERC721Received function, making sure tokens won't get stuck.
+   *
+   * @param fromAddress - address of the owner
+   * @param toAddress - address of the recipient
+   * @param tokenId - Token ID
+   *
+   * @remarks caller must be an approved address
+   *
+   */
+  safeTransferFrom(fromAddress: string, toAddress: string, tokenId: u64): void {
+    call(
+      this._origin,
+      'safeTransferFrom',
+      new Args().add(fromAddress).add(toAddress).add(tokenId),
+      0,
+    );
+  }
+
+  /**
    * Get the approved address(es) of a token
    *
    * @param tokenId - Token ID
