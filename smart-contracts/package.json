@@ -28,7 +28,7 @@
         "@massalabs/massa-web3": "^1.13.0",
         "@massalabs/prettier-config-as": "^0.0.2",
         "@types/node": "^18.11.10",
-        "assemblyscript": "^0.25.2",
+        "assemblyscript": "^0.27.2",
         "dotenv": "^16.0.3",
         "prettier": "^2.8.1",
         "ts-node": "^10.9.1",
@@ -38,8 +38,8 @@
     },
     "type": "module",
     "prettier": "@massalabs/prettier-config-as",
-    "files": [       
+    "files": [
         "build",
         "assembly"
-      ]
+    ]
 }
