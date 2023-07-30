@@ -21,6 +21,12 @@ The [Non-Fungible Token standard implementation](smart-contracts/assembly/contra
 
 This is MassaLabs implementation of [the ERC721](https://ethereum.org/en/developers/docs/standards/tokens/erc-721/).
 
+## Semi-Fungible Token
+
+The [Semi-Fungible Token standard implementation](smart-contracts/assembly/contracts/SFT) defines a common set of rules for creating and managing Massa-based tokens that are semi-fungible (i.e. semi-unique).
+
+This is MassaLabs implementation of [the ERC1155](https://ethereum.org/en/developers/docs/standards/tokens/erc-1155/).
+
 ## Massa Units
 
 The [Massa Units standard](units.md) defines a set of common units of measurement for use on the Massa blockchain.
